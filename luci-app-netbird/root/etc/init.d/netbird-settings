@@ -29,7 +29,8 @@ USE_PROCD=1
 
 TAG="netbird-settings"
 NB_SERVICE="/etc/init.d/netbird"   # 上游 daemon 生命周期 init
-# 未登录时保存的设置待登录后应用的标记(后端在登录成功后检查并补一次应用)。
+# 设置待应用标记(未登录时保存的设置、或全新安装/注销后首次登录前由后端落下;
+# 后端在登录成功后检查并补一次应用)。
 NB_SETTINGS_PENDING="/etc/netbird-settings.pending"
 # 上次成功应用的 up 参数指纹(tmpfs)。/etc/config/netbird 里还存着连接状态、出口节点等运行时字段,
 # 它们的写入会让之后任何页面的 Save&Apply(reload_config)对本包发出 config.change;参数没变时

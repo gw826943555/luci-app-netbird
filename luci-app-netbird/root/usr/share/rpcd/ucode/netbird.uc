@@ -416,11 +416,18 @@ function _build_auth_cmd(bin, verb, mgmt_url, setup_key) {
     return cmd;
 }
 
-// _apply_pending_settings() — 未登录时保存的设置（netbird-settings 留下待应用标记）在登录成功后
-// 补应用一次。后台执行、不阻塞本次 RPC；应用会 down→up，本次新建的连接随之短暂重连一次。
+// _apply_pending_settings() — 补应用「待应用」的 UCI 设置，来源两种：
+//   - 未登录时保存的设置（netbird-settings reload 留下待应用标记）；
+//   - 全新安装/注销后首次登录（_do_up 发现从未成功应用过设置时先落标记，见那里）。
+// 后台执行、不阻塞本次 RPC；应用会 down→up，本次新建的连接随之短暂重连一次。
 const _NB_SETTINGS_PENDING = '/etc/netbird-settings.pending';
 // netbird-settings 记录的「上次成功应用的参数指纹」;身份被清除或需要强制重新应用时作废。
 const _NB_SETTINGS_APPLIED = '/var/run/netbird-settings.applied';
+function _mark_settings_pending() {
+    let f = open(_NB_SETTINGS_PENDING, 'w');
+    if (f != null)
+        f.close();
+}
 function _apply_pending_settings() {
     if (!access(_NB_SETTINGS_PENDING, 'f'))
         return;
@@ -3052,6 +3059,14 @@ function _do_up(req) {
     let from_watchdog = (type(a.caller) == 'string' && a.caller == 'watchdog');
     if (reconnect_with_existing_identity && !from_watchdog)
         _set_desired_connected(true);
+
+    // 首次登录（带 setup key）：若本插件从未成功应用过设置（/var/run 指纹缺失，典型为全新
+    // 安装或注销后），daemon 配置可能仍是 netbird 默认值。先落「待应用」标记，登录成功后由
+    // _apply_pending_settings 补一次应用，确保 UCI 的 up 参数（如 enable_dns=0 →
+    // --disable-dns=true）在第一次连接时就生效，而不是等用户回设置页保存一次。
+    // 指纹存在时不落标记：普通重连/重复登录不做多余的 down→up。
+    if (length(setup_key) > 0 && !access(_NB_SETTINGS_APPLIED, 'f'))
+        _mark_settings_pending();
 
     let auth_log_before = _recent_auth_log_text().text;
     let cmd = _build_auth_cmd(bin, 'up', mr.url, setup_key);
